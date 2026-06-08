@@ -98,7 +98,10 @@ Teams ──► Azure Bot Service ──► APIM (public gateway) ──► Priv
 │   ├── .env.template
 │   └── test_bridge.py                  # Routing/connectivity test
 │
-
+├── foundryagents/
+│   └── hostedagent/                    # Sample hosted agent (azd) bound to the
+│                                       # existing private Foundry project
+│
 └── teams-relay/                        # (reference) self-hosted relay-bot alternative
 ```
 
@@ -146,7 +149,44 @@ After publishing a **new** agent from the Foundry portal, repoint its bot:
 
 ---
 
-## 🧪 Testing
+## � Hosted agents
+
+The same bridge works for **hosted agents** (containerized agents that run inside
+Foundry), not just prompt agents. A sample lives in
+[foundryagents/hostedagent](foundryagents/hostedagent), scaffolded with `azd ai agent`
+and bound to the **existing** private Foundry project (no new Foundry is provisioned).
+
+Deploy the agent into the existing project:
+
+```powershell
+cd foundryagents/hostedagent
+# Bind to your existing project and a deployed model:
+azd ai agent init -m "<manifest-url>" --project-id "<project-resource-id>" --model-deployment "gpt-4.1"
+azd deploy <service-name>
+```
+
+Then publish it to Teams from the Foundry portal and onboard its bot to the bridge:
+
+```powershell
+./deploy.ps1 -OnboardOnly
+```
+
+Updates flow automatically: the Teams bot endpoint targets the agent by **name**
+(version-less), so each `azd deploy` that creates a new active version is served
+immediately — no re-onboarding needed.
+
+> **Hosted-agent gotchas** (learned the hard way):
+> - The image is pulled by the **project** managed identity over the ACR **public**
+>   endpoint — grant it `AcrPull`. Private ACR isn't supported for hosted agents.
+> - Use a standard (non-ABAC) ACR; ABAC mode breaks the remote build.
+> - Give the container enough resources (e.g. `1` CPU / `2Gi`); the agent-framework
+>   image is too large for the smallest tier.
+> - Deploying to a private Foundry from outside the VNet needs a temporary
+>   `publicNetworkAccess` toggle for the management calls; restore it to `Disabled` after.
+
+---
+
+## �🧪 Testing
 
 ```powershell
 python -m venv .venv
