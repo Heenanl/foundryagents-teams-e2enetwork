@@ -1,0 +1,43 @@
+<!--
+  foundry-activity-policy.xml
+  API-level policy for the Foundry to Teams bridge.
+
+  - Sets the Foundry activity-protocol api-version query parameter as a fallback
+    (exists-action=skip), using the APIM named value {{foundry-api-version}}.
+    A version already present on the request is preserved.
+  - Strips the APIM subscription key header (not used for Bot Service traffic).
+
+  The Bot Framework JWT from Azure Bot Service is forwarded unchanged; Foundry
+  validates it.
+-->
+<policies>
+  <inbound>
+    <base />
+    <set-query-parameter name="api-version" exists-action="skip">
+      <value>{{foundry-api-version}}</value>
+    </set-query-parameter>
+    <set-header name="Ocp-Apim-Subscription-Key" exists-action="delete" />
+
+    <!-- ─── OPTIONAL HARDENING (enable once basic flow is verified) ───────────
+    Reject anything that isn't a valid Bot Framework token at the edge, instead
+    of forwarding junk to Foundry. Audience must equal the bot's Microsoft App ID.
+
+    <validate-jwt header-name="Authorization" failed-validation-httpcode="401"
+                  failed-validation-error-message="Unauthorized">
+      <openid-config url="https://login.botframework.com/v1/.well-known/openidconfiguration" />
+      <audiences>
+        <audience>{{bot-app-id}}</audience>
+      </audiences>
+    </validate-jwt>
+    ──────────────────────────────────────────────────────────────────────── -->
+  </inbound>
+  <backend>
+    <base />
+  </backend>
+  <outbound>
+    <base />
+  </outbound>
+  <on-error>
+    <base />
+  </on-error>
+</policies>

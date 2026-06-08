@@ -1,0 +1,21 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Local env / secrets
+tests/.env
+*.env
+!tests/.env.template
+
+# Bicep build artifacts
+infra/**/*.json
+!infra/resourcegroup.config.json
+
+# Azure / tooling
+.azure/
+*.log
+last-trace.json
+
+# Internal docs (not shared)
+docs/

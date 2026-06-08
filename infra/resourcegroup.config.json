@@ -1,0 +1,8 @@
+{
+  "resourceGroupName": "rg-foundry-privateagent",
+  "location": "swedencentral",
+  "tags": {
+    "project": "foundry-teams-bridge",
+    "environment": "prod"
+  }
+}
