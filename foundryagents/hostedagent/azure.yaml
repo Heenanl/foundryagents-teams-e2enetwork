@@ -5,6 +5,18 @@ requiredVersions:
         azure.ai.agents: '>=0.1.0-preview'
 name: ai-foundry-starter-basic
 services:
+    agent-framework-agent-azure-search-rag-responses:
+        project: src/agent-framework-agent-azure-search-rag-responses
+        host: azure.ai.agent
+        language: docker
+        docker:
+            remoteBuild: true
+        config:
+            container:
+                resources:
+                    cpu: "1"
+                    memory: 2Gi
+            startupCommand: python main.py
     agent-framework-agent-basic-responses-2:
         project: src/agent-framework-agent-basic-responses-2
         host: azure.ai.agent
@@ -16,15 +28,18 @@ services:
                 resources:
                     cpu: "1"
                     memory: 2Gi
-            deployments:
-                - model:
-                    format: OpenAI
-                    name: gpt-4.1
-                    version: "2025-04-14"
-                  name: gpt-4.1
-                  sku:
-                    capacity: 10
-                    name: GlobalStandard
+            startupCommand: python main.py
+    contoso-support-agent:
+        project: src/contoso-support-agent
+        host: azure.ai.agent
+        language: docker
+        docker:
+            remoteBuild: true
+        config:
+            container:
+                resources:
+                    cpu: "1"
+                    memory: 2Gi
             startupCommand: python main.py
 infra:
     provider: bicep

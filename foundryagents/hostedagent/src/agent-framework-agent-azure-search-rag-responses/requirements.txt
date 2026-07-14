@@ -1,0 +1,6 @@
+agent-framework
+agent-framework-azure-ai-search
+# Pin to the last release that speaks Foundry hosting protocol 1.0.0.
+# Newer builds (>=1.0.0a260630) require protocol 2.0.0, which the hosted
+# environment does not yet provide, causing a RuntimeError on every request.
+agent-framework-foundry-hosting==1.0.0a260618

@@ -6,9 +6,17 @@
     (exists-action=skip), using the APIM named value {{foundry-api-version}}.
     A version already present on the request is preserved.
   - Strips the APIM subscription key header (not used for Bot Service traffic).
+  - Removes redundant Teams "text/html" echo attachments from the inbound Activity.
+    In 1:1 personal Teams chats, Teams adds an inline text/html rendering of the
+    user's message as an attachment. The Foundry activityprotocol gateway converts
+    each attachment into a model input_file; the html echo has no filename/extension
+    and the model rejects it with `unsupported_file`. The message text is already in
+    the Activity `text` field, so dropping these echo attachments loses nothing.
+    Real file uploads (pdf/docx/etc.) use other content types and are preserved.
 
   The Bot Framework JWT from Azure Bot Service is forwarded unchanged; Foundry
-  validates it.
+  validates it. Because auth is header-based, the request body is NOT signed and
+  may be safely rewritten here.
 -->
 <policies>
   <inbound>
@@ -17,6 +25,23 @@
       <value>{{foundry-api-version}}</value>
     </set-query-parameter>
     <set-header name="Ocp-Apim-Subscription-Key" exists-action="delete" />
+    <set-body>@{
+        var body = context.Request.Body.As<JObject>(preserveContent: true);
+        var attachments = body["attachments"] as JArray;
+        if (attachments != null)
+        {
+            var filtered = new JArray(attachments.Where(a => (string)a["contentType"] != "text/html"));
+            if (filtered.Count == 0)
+            {
+                body.Remove("attachments");
+            }
+            else
+            {
+                body["attachments"] = filtered;
+            }
+        }
+        return body.ToString(Newtonsoft.Json.Formatting.None);
+    }</set-body>
 
     <!-- ─── OPTIONAL HARDENING (enable once basic flow is verified) ───────────
     Reject anything that isn't a valid Bot Framework token at the edge, instead

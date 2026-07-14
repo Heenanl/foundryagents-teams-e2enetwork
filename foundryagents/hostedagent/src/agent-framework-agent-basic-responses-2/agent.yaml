@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=https://raw.githubusercontent.com/microsoft/AgentSchema/refs/heads/main/schemas/v1.0/ContainerAgent.yaml
 
 kind: hosted
-name: agent-framework-agent-basic-responses
+name: agent-framework-agent-basic-citadel
 description: |
     A basic Agent Framework agent hosted by Foundry.
 metadata:
@@ -19,4 +19,4 @@ resources:
     memory: 2Gi
 environment_variables:
     - name: AZURE_AI_MODEL_DEPLOYMENT_NAME
-      value: gpt-4.1
+      value: citadel-hub-connection/gpt-5-mini
