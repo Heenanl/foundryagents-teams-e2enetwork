@@ -1,10 +1,16 @@
 # Private Foundry → Microsoft Teams Bridge
 
 Make **private (VNet-isolated) Azure AI Foundry hosted agents** work in **Microsoft Teams**
-while keeping Foundry's **one-click Teams publish** experience.
+and **Microsoft 365 Copilot**.
 
 An **API Management Standard v2** instance bridges the public Azure Bot Service to the
 private Foundry endpoint, so Foundry never needs public network access.
+
+> **Foundry removed the one-click "Publish to Teams" button for private-networking
+> projects.** This repo replaces it with the supported REST-API publish flow
+> ([scripts/Publish-AgentToTeams.ps1](scripts/Publish-AgentToTeams.ps1)) — it creates the
+> Azure Bot, points it at the APIM bridge, and calls Foundry's Microsoft 365 publish API.
+> See [publish-copilot-virtual-network](https://learn.microsoft.com/azure/foundry/agents/how-to/publish-copilot-virtual-network).
 
 ```
 Teams ──► Azure Bot Service ──► APIM (public gateway) ──► Private Foundry (via VNet)
@@ -39,8 +45,9 @@ Teams ──► Azure Bot Service ──► APIM (public gateway) ──► Priv
 ## 🚀 Features
 
 - **Private-by-design** — Foundry data plane is never exposed publicly.
-- **Preserves Foundry one-click publish** — only the bot's messaging endpoint is repointed.
-- **Scales to many agents** — single templated operation; new agents need only onboarding.
+- **REST-API publish** — replaces the removed Foundry portal button: creates the bot,
+  points it at the bridge, and publishes to Microsoft 365 / Teams in one command.
+- **Scales to many agents** — single templated operation; new agents need only publishing.
 - **Idempotent onboarding reconciler** — repoints new bots; safe to re-run or schedule.
 - **Infrastructure as Code** — Bicep modules + `.bicepparam`.
 - **Auth-transparent** — Bot Framework JWT forwarded unchanged; Foundry validates it.
@@ -79,6 +86,7 @@ Teams ──► Azure Bot Service ──► APIM (public gateway) ──► Priv
 │   ├── main.bicep                      # Orchestration template
 │   ├── main.parameters.bicepparam      # Parameters (edit before deploy)
 │   ├── resourcegroup.config.json       # Resource group + tags
+│   ├── bot-service.bicep               # Per-agent Azure Bot + Teams channel (REST publish)
 │   └── modules/
 │       ├── network.bicep               # APIM subnet + NSG
 │       ├── apim.bicep                  # APIM Standard v2 + VNet integration
@@ -90,7 +98,8 @@ Teams ──► Azure Bot Service ──► APIM (public gateway) ──► Priv
 │   └── foundry-activity-policy.xml     # Bridge policy (api-version + hardening notes)
 │
 ├── scripts/
-│   └── Onboard-Agents.ps1              # Reconciler: repoint Foundry bots to APIM
+│   ├── Publish-AgentToTeams.ps1        # Create bot + publish agent (REST) via the bridge
+│   └── Onboard-Agents.ps1              # Reconciler: repoint existing bots to APIM
 │
 ├── tests/
 │   ├── README.md
@@ -136,13 +145,26 @@ az login
 
 APIM provisioning takes ~10 minutes on first deploy.
 
-### 3. Onboard new agents
+### 3. Publish an agent to Teams
 
-After publishing a **new** agent from the Foundry portal, repoint its bot:
+The Foundry portal's one-click publish button is unavailable for private-networking
+projects. Create the agent's bot and publish it via the REST flow:
 
 ```powershell
-./deploy.ps1 -OnboardOnly
+./scripts/Publish-AgentToTeams.ps1 `
+    -ResourceGroup rg-foundry-privateagent `
+    -AgentName <agent-name> `
+    -ProjectEndpoint https://<account>.services.ai.azure.com/api/projects/<project> `
+    -ApimName apim-foundry-bridge
 ```
+
+This creates the Azure Bot (endpoint pointed at the APIM bridge), enables the Teams
+channel, and calls Foundry's Microsoft 365 publish API. Use `-PublishScope Tenant` for
+org-wide publishing (needs Microsoft 365 admin approval); increment `-AppVersion` to change
+user-facing metadata on republish. Add `-WhatIf` to preview.
+
+> **Reconcile existing bots.** If a bot was created outside this repo (e.g. still pointing
+> at the private Foundry host), repoint it to the bridge with `./deploy.ps1 -OnboardOnly`.
 
 ---
 
