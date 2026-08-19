@@ -1,0 +1,62 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
+
+# The Work IQ connection (workiq-conn) and toolbox (sharepoint-tools) are created
+# out-of-band via CLI/REST (see README) because the OAuth2 connection needs a client
+# secret. This manifest defines only the model + hosted agent; the agent reaches the
+# toolbox at runtime with its own agent identity via TOOLBOX_NAME.
+requiredVersions:
+  extensions:
+    azure.ai.agents: '>=1.0.0-beta.4'
+name: agent-framework-agent-sharepoint
+services:
+  ai-project:
+    host: azure.ai.project
+    deployments:
+      # Reuse an existing model deployment in your Foundry project.
+      - name: gpt-4.1
+        model:
+          format: OpenAI
+          name: gpt-4.1
+        version: '2025-04-14'
+        sku:
+          name: GlobalStandard
+          capacity: 10
+
+  agent-framework-agent-sharepoint:
+    host: azure.ai.agent
+    metadata:
+      tags:
+        - Agent Framework
+        - AI Agent Hosting
+        - Azure AI AgentServer
+        - Responses Protocol
+        - Streaming
+        - SharePoint
+        - Work IQ
+    project: src/agent-framework-agent-sharepoint
+    language: python
+    codeConfiguration:
+      runtime: python_3_13
+      entryPoint: main.py
+    uses:
+      - ai-project
+    kind: hosted
+    name: agent-framework-agent-sharepoint
+    description: An Agent Framework hosted agent that reads SharePoint/M365 on behalf of the signed-in user via a Work IQ toolbox.
+    protocols:
+      - protocol: responses
+        version: 2.0.0
+    environmentVariables:
+      - name: AZURE_AI_MODEL_DEPLOYMENT_NAME
+        value: ${AZURE_AI_MODEL_DEPLOYMENT_NAME}
+      # Name of the toolbox created via CLI/REST (see README step 3).
+      - name: TOOLBOX_NAME
+        value: sharepoint-tools
+      - name: ENABLE_TOOLBOX
+        value: 'true'
+    container:
+      resources:
+        cpu: '0.5'
+        memory: 1Gi
+infra:
+  provider: microsoft.foundry
