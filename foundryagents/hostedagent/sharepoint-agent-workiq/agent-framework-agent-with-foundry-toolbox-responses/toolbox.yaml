@@ -1,0 +1,23 @@
+# Mirrors the `sharepoint-tools` toolbox (default version 1) in your Foundry project.
+# Recreate with: azd ai toolbox create sharepoint-tools --from-file toolbox.yaml
+#
+# Primary route for HOSTED agents: Work IQ A2A (work_iq_preview) via OAuth2 consent.
+# Foundry manages the signed-in user's token server-side through an interactive
+# consent flow, which a hosted container CAN complete. Reasons over the user's M365
+# context including SharePoint/OneDrive files. Backed by `workiq-conn`
+# (RemoteA2A, OAuth2, WorkIQAgent.Ask). Requires the BYO app + admin consent (README step 1).
+description: Work IQ (M365 incl. SharePoint) via OAuth2 user delegation
+tools:
+  - type: work_iq_preview
+    project_connection_id: workiq-conn
+
+# Alternative — dedicated SharePoint MCP server. NOTE: this uses UserEntraToken
+# (identity passthrough), which a HOSTED agent cannot satisfy: the container only
+# receives an agent identity + user-id/call-id, never the user's delegated token,
+# so tools/list fails with "requires a delegated Microsoft Entra user context".
+# Keep for reference / non-hosted (prompt-agent / direct Responses) callers only.
+#  - type: mcp
+#    server_label: sharepoint
+#    server_url: https://agent365.svc.cloud.microsoft/agents/servers/mcp_SharePointRemoteServer
+#    project_connection_id: sharepoint-workiq-conn
+#    require_approval: never
