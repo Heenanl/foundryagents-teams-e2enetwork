@@ -67,25 +67,28 @@ $logs = @(
 )
 if ($IncludeTrace) { $logs += @{ category = "Trace"; enabled = $true } }
 
-$logsFile = Join-Path ([System.IO.Path]::GetTempPath()) "foundry-diag-logs.json"
-($logs | ConvertTo-Json -AsArray) | Out-File $logsFile -Encoding ascii
+$logsFile = (New-TemporaryFile).FullName
+try {
+    $logs | ConvertTo-Json -Depth 10 | Set-Content -Path $logsFile -Encoding utf8
 
-$createArgs = @(
-    "monitor", "diagnostic-settings", "create",
-    "--name", $DiagnosticSettingName,
-    "--resource", $AccountResourceId,
-    "--workspace", $WorkspaceResourceId,
-    "--logs", "@$logsFile"
-)
-if ($ResourceSpecific) { $createArgs += @("--export-to-resource-specific", "true") }
+    $createArgs = @(
+        "monitor", "diagnostic-settings", "create",
+        "--name", $DiagnosticSettingName,
+        "--resource", $AccountResourceId,
+        "--workspace", $WorkspaceResourceId,
+        "--logs", "@$logsFile"
+    )
+    if ($ResourceSpecific) { $createArgs += @("--export-to-resource-specific", "true") }
 
-Write-Host "`nCreating diagnostic setting '$DiagnosticSettingName'..." -ForegroundColor Cyan
-az @createArgs -o json | ConvertFrom-Json |
-    Select-Object name, @{n = "workspace"; e = { $_.workspaceId } },
-    @{n = "categories"; e = { ($_.logs | Where-Object enabled | ForEach-Object category) -join ", " } } |
-    Format-List
-
-Remove-Item $logsFile -ErrorAction SilentlyContinue
+    Write-Host "`nCreating diagnostic setting '$DiagnosticSettingName'..." -ForegroundColor Cyan
+    az @createArgs -o json | ConvertFrom-Json |
+        Select-Object name, @{n = "workspace"; e = { $_.workspaceId } },
+        @{n = "categories"; e = { ($_.logs | Where-Object enabled | ForEach-Object category) -join ", " } } |
+        Format-List
+}
+finally {
+    Remove-Item $logsFile -ErrorAction SilentlyContinue
+}
 
 Write-Host "`nDone. Allow ~5-15 minutes for the first logs to appear in Log Analytics." -ForegroundColor Green
 Write-Host "Then run the query in agent-attribution.kql to see agent operations by caller." -ForegroundColor Green
