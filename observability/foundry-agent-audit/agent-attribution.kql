@@ -1,0 +1,40 @@
+// ---------------------------------------------------------------------------
+// Foundry agent attribution — "who created / changed which agent"
+//
+// Requires the diagnostic setting from Enable-FoundryAgentAuditLogging.ps1
+// (Audit + RequestResponse -> Log Analytics). Agent data-plane operations
+// surface under MICROSOFT.COGNITIVESERVICES with a generic OperationName
+// (Projects_Wildcard_Post = create/update, Projects_Wildcard_Delete = delete).
+// The caller's Entra object id is embedded in the properties_s JSON (objectId).
+//
+// Only covers operations AFTER logging was enabled. Resolve an object id to a
+// user with:  az ad user show --id <objectId> --query "{name:displayName, upn:userPrincipalName}"
+// ---------------------------------------------------------------------------
+
+// 1) Agent create/update/delete operations with the caller object id
+AzureDiagnostics
+| where TimeGenerated > ago(30d)
+| where ResourceProvider == "MICROSOFT.COGNITIVESERVICES"
+| where OperationName startswith "Projects_Wildcard_Post"
+     or OperationName startswith "Projects_Wildcard_Delete"
+     or OperationName startswith "Projects_Wildcard_Patch"
+| extend p = parse_json(properties_s)
+| project
+    TimeGenerated,
+    Account         = Resource,
+    Operation       = OperationName,
+    Result          = ResultSignature,          // 200 = success
+    CallerObjectId  = tostring(p.objectId),     // Entra oid of the person -> resolve with `az ad user show`
+    CallerIP        = CallerIPAddress,
+    Api             = tostring(p.apiName)
+| order by TimeGenerated desc
+
+
+// 2) OPTIONAL — all data-plane calls by caller (broader activity view)
+// AzureDiagnostics
+// | where TimeGenerated > ago(7d)
+// | where ResourceProvider == "MICROSOFT.COGNITIVESERVICES"
+// | extend p = parse_json(properties_s)
+// | summarize Operations = count(), Last = max(TimeGenerated)
+//     by CallerObjectId = tostring(p.objectId), OperationName
+// | order by Last desc
