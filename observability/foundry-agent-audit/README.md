@@ -58,10 +58,10 @@ Enabling the setting and creating a test agent produced this row (~5–15 min in
 
 | Time (UTC) | Operation | Result | Caller object ID |
 | --- | --- | --- | --- |
-| 2026‑08‑27 07:32:14 | `Projects_Wildcard_Post` | 200 | `bae3a7eb‑e191‑4420‑b5c6‑5e5018e1d48f` |
+| 2026‑08‑27 07:32:14 | `Projects_Wildcard_Post` | 200 | `<CallerObjectId>` |
 
-`az ad user show --id bae3a7eb‑e191‑4420‑b5c6‑5e5018e1d48f` → **System Administrator
-(`admin@…onmicrosoft.com`)** — i.e. the person who created the agent. ✅
+`az ad user show --id <CallerObjectId>` → **<Display Name>
+(`<user@tenant.onmicrosoft.com>`)** — i.e. the person who created the agent.
 
 ## Caveats
 
