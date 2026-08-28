@@ -1,0 +1,61 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
+
+# Hosted agent that grounds on ONE SharePoint site per user by calling the Microsoft 365 Copilot
+# Retrieval API with a user token passed in via structured_inputs (see src/.../main.py and README).
+requiredVersions:
+  extensions:
+    azure.ai.agents: '>=1.0.0-beta.4'
+name: agent-framework-agent-sharepoint-obo
+services:
+  ai-project:
+    host: azure.ai.project
+    deployments:
+      - name: gpt-4.1
+        model:
+          format: OpenAI
+          name: gpt-4.1
+        version: '2025-04-14'
+        sku:
+          name: GlobalStandard
+          capacity: 10
+
+  agent-framework-agent-sharepoint-obo:
+    host: azure.ai.agent
+    metadata:
+      tags:
+        - Agent Framework
+        - AI Agent Hosting
+        - Responses Protocol
+        - SharePoint
+        - Retrieval API
+        - Per-user OBO
+    project: src/agent-framework-agent-sharepoint-obo
+    language: python
+    codeConfiguration:
+      runtime: python_3_13
+      entryPoint: main.py
+    uses:
+      - ai-project
+    kind: hosted
+    name: agent-framework-agent-sharepoint-obo
+    description: Hosted agent that grounds on one SharePoint site per user via the Retrieval API, using a user token passed through structured_inputs.
+    protocols:
+      - protocol: responses
+        version: 2.0.0
+    environmentVariables:
+      - name: AZURE_AI_MODEL_DEPLOYMENT_NAME
+        value: ${AZURE_AI_MODEL_DEPLOYMENT_NAME}
+      - name: SHAREPOINT_SITE_URL
+        value: ${SHAREPOINT_SITE_URL}
+      - name: RETRIEVAL_API_URL
+        value: ${RETRIEVAL_API_URL}
+      - name: STRUCTURED_INPUT_TOKEN_KEY
+        value: ${STRUCTURED_INPUT_TOKEN_KEY}
+      - name: MAX_RESULTS
+        value: ${MAX_RESULTS}
+    container:
+      resources:
+        cpu: '0.5'
+        memory: 1Gi
+infra:
+  provider: microsoft.foundry
