@@ -21,6 +21,7 @@ Teams ──► Azure Bot Service ──► APIM (public gateway) ──► Priv
 ## 🏗️ Architecture
 
 ```
+                          INBOUND: Teams ↔ private Foundry (the APIM bridge)
 ┌──────────┐   HTTPS    ┌──────────────────┐  webhook   ┌─────────────────────┐
 │  Teams   │ ─────────► │ Azure Bot Service │ ─────────► │  APIM Standard v2   │
 │  client  │ ◄───────── │ (public, M365)    │ ◄───────── │  (public gateway)   │
@@ -29,16 +30,25 @@ Teams ──► Azure Bot Service ──► APIM (public gateway) ──► Priv
                                                                   │ integration
                                                         ┌─────────▼───────────┐
                                                         │  Private Foundry     │
-                                                        │  *.services.ai...    │
-                                                        │  (private endpoint)  │
+                                                        │  hosted agent        │
+                                                        └─────────┬───────────┘
+        OUTBOUND (optional): per-user tool call        per-user   │ tool call
+        for the SharePoint Retrieval API route         (OAuth2 passthrough)
+                                                        ┌─────────▼───────────┐
+                                                        │  MCP-OBO gateway     │──► Entra (OBO)
+                                                        │  (this repo)         │──► Copilot Retrieval API
                                                         └─────────────────────┘
 ```
 
-- **One templated APIM operation** (`/api/projects/{project}/agents/{agent}/...`) serves
-  **every** agent — current and future. APIM is configured once.
-- **Foundry stays private.** Only APIM's gateway is public; APIM reaches Foundry over the VNet.
-- **Version-agnostic.** The bridge preserves whatever `api-version` Foundry sets per bot;
-  the policy injects a fallback only if missing.
+- **INBOUND (the bridge).** **One templated APIM operation**
+  (`/api/projects/{project}/agents/{agent}/...`) serves **every** agent — configured once.
+  Foundry stays private; only APIM's gateway is public. The bridge is **auth-transparent** and
+  **version-agnostic** (preserves each bot's `api-version`, injecting a fallback only if missing).
+- **OUTBOUND (optional).** A hosted agent can call out to the **[MCP-OBO gateway](foundryagents/mcp-obo-gateway/README.md)**
+  via an OAuth2 identity-passthrough connection to reach **SharePoint per-user** through the Copilot
+  Retrieval API. This is a **separate leg** from the bridge and only used by the
+  `sharepoint-agent-copilot-retrieval` sample; the Work IQ / Databricks samples use Microsoft-hosted
+  MCP endpoints instead.
 
 ---
 
@@ -82,34 +92,46 @@ Teams ──► Azure Bot Service ──► APIM (public gateway) ──► Priv
 ├── deploy.ps1                          # Orchestrator: deploy infra + onboard bots
 ├── README.md                           # This file
 │
-├── infra/                              # Infrastructure as Code
+├── infra/                              # Infrastructure as Code (the APIM bridge)
 │   ├── main.bicep                      # Orchestration template
 │   ├── main.parameters.bicepparam      # Parameters (edit before deploy)
 │   ├── resourcegroup.config.json       # Resource group + tags
 │   ├── bot-service.bicep               # Per-agent Azure Bot + Teams channel (REST publish)
-│   └── modules/
-│       ├── network.bicep               # APIM subnet + NSG
-│       ├── apim.bicep                  # APIM Standard v2 + VNet integration
-│       ├── apim-config.bicep           # Named values (foundry-api-version)
-│       ├── apim-api.bicep              # Bridge API + templated all-agents operation
-│       └── apim-policies.bicep         # Policy attachment
+│   └── modules/                        # network / apim / apim-config / apim-api / apim-policies
 │
 ├── apim-policies/
 │   └── foundry-activity-policy.xml     # Bridge policy (api-version + hardening notes)
 │
 ├── scripts/
 │   ├── Publish-AgentToTeams.ps1        # Create bot + publish agent (REST) via the bridge
-│   └── Onboard-Agents.ps1              # Reconciler: repoint existing bots to APIM
+│   ├── Onboard-Agents.ps1              # Reconciler: repoint existing bots to APIM
+│   └── Register-GatewayApp.ps1         # Register the Entra app for the MCP-OBO gateway
 │
-├── tests/
-│   ├── README.md
-│   ├── requirements.txt
-│   ├── .env.template
-│   └── test_bridge.py                  # Routing/connectivity test
+├── foundryagents/                      # Agent samples (optional — deploy onto the bridge above)
+│   ├── hostedagent/                    #   sharepoint-agent-workiq · databricks-agent ·
+│   │                                   #   sharepoint-agent-copilot-retrieval
+│   ├── promptagent/                    #   sharepoint-agent-grounding-tool
+│   └── mcp-obo-gateway/                #   per-user OBO gateway for the Copilot Retrieval API
 │
-
-└── teams-relay/                        # (reference) self-hosted relay-bot alternative
+├── guides/
+│   └── agent-tool-support-matrix.md    # Which agent/tool for SharePoint access — start here
+│
+└── tests/
+    └── test_bridge.py                  # Routing/connectivity test (+ README, requirements)
 ```
+
+---
+
+## 🤖 Foundry agents (optional)
+
+The bridge is agent-agnostic — it carries **any** agent's Teams traffic. This repo also ships
+ready-to-deploy **agent samples** under [foundryagents/](foundryagents/). To add an agent, start with
+the one-page decision matrix [guides/agent-tool-support-matrix.md](guides/agent-tool-support-matrix.md),
+then open the matching sample's README and run `azd up`:
+
+- **Hosted + Teams + per-user + one SharePoint site** → [mcp-obo-gateway](foundryagents/mcp-obo-gateway/README.md) + [sharepoint-agent-copilot-retrieval](foundryagents/hostedagent/sharepoint-agent-copilot-retrieval/README.md)
+- **Hosted + Teams, broad M365 (no site scoping)** → [sharepoint-agent-workiq](foundryagents/hostedagent/sharepoint-agent-workiq/README.md)
+- **Prompt agent, site-scoped (not hosted)** → [sharepoint-agent-grounding-tool](foundryagents/promptagent/sharepoint-agent-grounding-tool/README.md)
 
 ---
 

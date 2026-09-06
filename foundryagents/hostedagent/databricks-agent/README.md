@@ -1,33 +1,17 @@
-# Azure Databricks Genie from a Foundry **hosted agent** (OBO / user-identity route)
+# What this sample demonstrates
 
-This is the **hosted-agent** version of the `agent-databricks-OBO` portal agent. It lets a
-Foundry *hosted* agent answer natural-language questions over an **Azure Databricks Genie**
-space **on behalf of the signed-in user**, and still publish the agent to Microsoft Teams.
+A Foundry **hosted agent** that answers natural-language questions over an **Azure Databricks Genie**
+space **on behalf of the signed-in user**, and publishes to Microsoft Teams on the Foundry auto-bot.
+Agent Framework, Responses protocol.
 
-> This scaffold mirrors the **verified** SharePoint hosted-agent route in
-> [`../sharepoint-agent-workiq`](../sharepoint-agent-workiq/README.md). The identity mechanics
-> are the same (a toolbox-wrapped MCP tool + server-side OAuth consent), so a hosted container
-> can complete the user delegation that a portal agent does interactively.
+## How it works
 
-## TL;DR — what works and why
-
-| Layer | Use this | Not this |
-| --- | --- | --- |
-| Databricks access | **Azure Databricks Genie** remote MCP tool in a **toolbox** | app-only / static token to Databricks |
-| Auth | **OAuth identity passthrough** (Databricks custom OAuth app) → Foundry holds the user token server-side | Entra `UserEntraToken` passthrough (hosted container can't satisfy it) |
-| Runtime | `set_resilient_tasks_enabled(True)` in `main.py` | default (server_error on `store=true`) |
-| Consent UX | native `oauth_consent_request` sign-in card (consent patch in `main.py`) | raw error blob in Teams |
-
-## Why a toolbox (and not the tool directly on a hosted agent)
-
-The portal agent attaches the **Azure Databricks Genie** tool via the `AzureDatabricksGenieOBO`
-connection and, on first use, shows an **Open consent → sign in to Azure Databricks → Approve**
-flow. A *hosted* agent's container authenticates to Foundry with its **own agent identity**, so
-it can't hold the user's Databricks token itself. Putting Genie behind a **Toolbox** lets Foundry
-perform the OAuth consent + token handling **server-side, per user**, while the hosted runtime
-preserves the caller's context — so user-delegated Genie calls work, including after Teams publish.
-
-## Architecture
+A hosted container authenticates to Foundry with its **own agent identity**, so it can't hold the
+user's Databricks token (Entra `UserEntraToken` passthrough won't work here). Instead this agent calls
+a **Foundry Toolbox** wrapping the **Azure Databricks Genie** remote MCP tool over an **OAuth
+identity-passthrough** connection: Foundry performs the Databricks OAuth consent + token handling
+server-side, per user, so Genie runs under the caller's identity and honors Unity Catalog permissions.
+See [`main.py`](agent-framework-agent-with-foundry-toolbox-responses/src/agent-framework-agent-databricks/main.py).
 
 ```mermaid
 flowchart LR
@@ -38,155 +22,105 @@ flowchart LR
     U -.->|first-time Databricks OAuth consent| GEN
 ```
 
-**Published to Teams** goes through the repo's APIM bridge exactly like the SharePoint agent; the
-bridge only carries the activity-protocol transport and is **auth-transparent** (consent + OBO
-happen server-side in Foundry).
+Publishing to Teams goes through the repo's APIM bridge like any hosted agent; the bridge is
+auth-transparent (consent + OBO happen server-side).
 
 ## Prerequisites
 
-- The **Managed MCP Servers** preview is enabled in your Azure Databricks workspace.
-- A **Genie Agent / space** exists (this is the "Vantia Retail customer churn" space).
-- A **custom OAuth application** is registered in your Azure Databricks account (client id + secret).
-- The `AzureDatabricksGenieOBO` **project connection** already exists in the Foundry project
-  (remote MCP, **OAuth identity passthrough**) — you created it when you built the portal agent.
-- Tooling: `az`, `azd` >= 1.25 with the `microsoft.foundry` / `azure.ai.*` extensions, signed in
-  to the correct tenant (`az login --tenant <id>`, `azd auth login --tenant-id <id>`).
+1. The **Managed MCP Servers** preview enabled in your Azure Databricks workspace, and a **Genie space**.
+2. A **custom OAuth application** registered in your Databricks account (client id + secret).
+3. An existing Foundry project with a model deployment (e.g. `gpt-4.1`).
+4. **Python 3.12+.**
+5. **Additional Azure resources:** the `AzureDatabricksGenieOBO` connection + `databricks-tools`
+   toolbox — created with the setup script under Option 1.
+6. **Access:** the calling user has access to the Genie space + Unity Catalog tables, and **Foundry
+   User** + **Foundry Agent Consumer** on the project.
 
-Placeholders — substitute your own values:
+Placeholders used below: `<SUBSCRIPTION_ID>`, `<RESOURCE_GROUP>`, `<FOUNDRY_ACCOUNT>`, `<PROJECT>`,
+`<workspace-host>`, `<space-id>`, `<DATABRICKS_OAUTH_CLIENT_ID>` / `<DATABRICKS_OAUTH_SECRET>`,
+`<APIM_NAME>`.
 
-| Placeholder | Meaning / example |
-| --- | --- |
-| `<SUBSCRIPTION_ID>` | Azure subscription of the Foundry account |
-| `<RESOURCE_GROUP>` | Resource group of the Foundry account, e.g. `rg-foundry-agents` |
-| `<FOUNDRY_ACCOUNT>` | Foundry (AI Services) account name |
-| `<PROJECT>` | Foundry project name |
-| `<APIM_NAME>` | APIM bridge name for Teams publish (see repo `infra/`) |
+## Option 1: Azure Developer CLI (`azd`)
 
----
+**Install:** `azd` 1.27.1+, then `azd ext install microsoft.foundry`; sign in with
+`azd auth login --tenant-id <id>` and `az login --tenant <id>`.
 
-## Step 1 — Confirm the Databricks Genie connection
+### Create the connection + toolbox (once)
 
-The portal agent already uses a connection named **`AzureDatabricksGenieOBO`** (remote MCP,
-OAuth identity passthrough). Reuse it. If you need to (re)create it, add the **Azure Databricks
-Genie** tool in the Foundry portal (**Tools → Azure Databricks Genie → Connect**) with:
-
-- **Remote MCP Server endpoint**: your Genie space MCP endpoint,
-  e.g. `https://<workspace-host>/api/2.0/mcp/genie/<space-id>`
-- **Authentication**: OAuth identity passthrough
-- **Client ID / Client secret**: from your Databricks custom OAuth app
-
-Ref: [Use Azure Databricks Genie in Microsoft Foundry](https://learn.microsoft.com/azure/databricks/integrations/microsoft-foundry).
-
----
-
-## Step 2 — Create the toolbox
-
-The toolbox bundles the Genie MCP tool behind one MCP endpoint. See
-[`agent-framework-agent-with-foundry-toolbox-responses/toolbox.yaml`](agent-framework-agent-with-foundry-toolbox-responses/toolbox.yaml)
-(it references `AzureDatabricksGenieOBO`).
+[`setup/Create-Connection-And-Toolbox.ps1`](setup/Create-Connection-And-Toolbox.ps1) creates the OAuth
+identity-passthrough connection and the toolbox, and prints Foundry's reply URL to register on your
+Databricks OAuth app — the *MCP OAuth Identity Passthrough* scenario from the
+[foundry-samples guide](https://github.com/microsoft-foundry/foundry-samples/blob/main/samples/python/hosted-agents/SUPPORTED_TOOLBOX_SCENARIOS/tools/mcp-oauth-custom.md):
 
 ```powershell
-azd ai project set https://<FOUNDRY_ACCOUNT>.services.ai.azure.com/api/projects/<PROJECT>
-
-cd agent-framework-agent-with-foundry-toolbox-responses
-azd ai toolbox create databricks-tools --from-file toolbox.yaml
-# The first version becomes the default automatically.
-azd ai toolbox show databricks-tools --output json
+./setup/Create-Connection-And-Toolbox.ps1 `
+  -ProjectEndpoint https://<FOUNDRY_ACCOUNT>.services.ai.azure.com/api/projects/<PROJECT> `
+  -WorkspaceHost <workspace-host> -GenieSpaceId <space-id> `
+  -DatabricksClientId <DATABRICKS_OAUTH_CLIENT_ID> -DatabricksClientSecret <DATABRICKS_OAUTH_SECRET> `
+  -SubscriptionId <SUBSCRIPTION_ID> -ResourceGroup <RESOURCE_GROUP> `
+  -AccountName <FOUNDRY_ACCOUNT> -ProjectName <PROJECT>
 ```
 
-The agent consumes the toolbox at:
-`https://<FOUNDRY_ACCOUNT>.services.ai.azure.com/api/projects/<PROJECT>/toolboxes/databricks-tools/mcp?api-version=v1`
+> Databricks is a **third-party** OAuth provider, so the connection uses the Databricks
+> authorize/token URLs (`/oidc/v1/...`) and scopes — confirm them for your workspace. Foundry's reply
+> URL must be registered on the **Databricks** OAuth app (the script prints it; you register it in the
+> Databricks account console). Portal alternative: Tools → Azure Databricks Genie → Connect.
 
----
-
-## Step 3 — Deploy the hosted agent (azd)
-
-The agent code is [`agent-framework-agent-with-foundry-toolbox-responses`](agent-framework-agent-with-foundry-toolbox-responses/).
-It connects to the toolbox with its own agent identity; Genie supplies the per-user identity.
+### Initialize and deploy the agent
 
 ```powershell
 $PROJECT_ID = "/subscriptions/<SUBSCRIPTION_ID>/resourceGroups/<RESOURCE_GROUP>/providers/Microsoft.CognitiveServices/accounts/<FOUNDRY_ACCOUNT>/projects/<PROJECT>"
 
-azd ai agent init `
-  -m <repo>\foundryagents\hostedagent\databricks-agent\agent-framework-agent-with-foundry-toolbox-responses\azure.yaml `
+azd ai agent init -m agent-framework-agent-with-foundry-toolbox-responses/azure.yaml `
   --project-id $PROJECT_ID --model-deployment gpt-4.1 --no-prompt --force -e databricks
-
-# Post-init flags (these bite every first deploy)
-azd env set enableHostedAgentVNext "true" -e databricks
-azd env set AZURE_AI_MODEL_DEPLOYMENT_NAME "gpt-4.1" -e databricks   # match a deployment in your project
-azd env set ENABLE_MONITORING "false" -e databricks                 # if the project already has App Insights
-
-# In the scaffolded src/<agent>/agent.yaml, replace any ${{VAR}} with single-brace ${VAR}
-
+azd env set enableHostedAgentVNext true -e databricks
+# In the scaffolded agent.yaml, replace any ${{VAR}} with single-brace ${VAR}
 azd up -e databricks
 ```
 
----
-
-## Step 4 — Test Genie access on behalf of a user
+### Invoke the deployed agent
 
 ```powershell
 azd ai agent invoke --new-session "How many customers churned last quarter for Vantia Retail?" --timeout 120
 ```
 
-1. The first call returns an **OAuth consent** URL. Open it, **sign in to Azure Databricks** as a
-   user with access to the Genie space, and **Approve**.
-2. Re-invoke the same question → you get an answer grounded in the Genie space, with the figures
-   (and SQL when helpful).
-3. **Verify permission trimming:** ask as a user *without* access to the space/tables and confirm
-   the data is **not** returned. This proves OBO honors Databricks permissions.
+The first call returns a **Databricks OAuth consent** URL — sign in and approve as a user with access
+to the Genie space, then re-invoke. To confirm per-user trimming, ask as a user *without* access to
+the tables and verify the data isn't returned.
 
----
+## Option 2: VS Code (Foundry Toolkit)
 
-## Step 5 — Publish to Teams (with the APIM bridge)
+1. Install the **Foundry Toolkit** VS Code extension and `az login`.
+2. Open `agent-framework-agent-with-foundry-toolbox-responses/`, run locally (`azd ai agent run` or
+   `python main.py`, port 8088), and chat via **Foundry Toolkit: Open Agent Inspector**.
+3. Run **Foundry Toolkit: Deploy Hosted Agent** to build, register the version, and assign RBAC.
 
-Same as any hosted agent in this repo — the APIM bridge carries the activity transport to the
-private Foundry endpoint; consent + OBO stay server-side.
+(The connection + toolbox from Option 1 are still required — create them first.)
+
+## Publish to Teams
+
+The Foundry auto-bot is preserved; publish through the repo's APIM bridge:
 
 ```powershell
-# From the repo root
-./scripts/Publish-AgentToTeams.ps1 `
-  -ResourceGroup <RESOURCE_GROUP> `
+./scripts/Publish-AgentToTeams.ps1 -ResourceGroup <RESOURCE_GROUP> `
   -AgentName agent-framework-agent-databricks `
-  -ProjectEndpoint https://<FOUNDRY_ACCOUNT>.services.ai.azure.com/api/projects/<PROJECT> `
-  -ApimName <APIM_NAME>
+  -ProjectEndpoint https://<FOUNDRY_ACCOUNT>.services.ai.azure.com/api/projects/<PROJECT> -ApimName <APIM_NAME>
 ```
 
-Then in Teams: open the agent, ask a churn question, complete the **first-time Databricks
-sign-in/consent**, and re-ask.
-
----
+Open the agent in Teams, complete the first-time Databricks sign-in/consent, and ask.
 
 ## Troubleshooting
 
 | Symptom | Cause / fix |
 | --- | --- |
 | Agent returns no tools | Toolbox name/`TOOLBOX_NAME` mismatch, or no default version. Check `azd ai toolbox show databricks-tools`. |
-| `oauth_consent_required` / consent URL every call | User hasn't completed the Databricks consent, or the refresh token expired. Complete the consent URL. |
+| Consent URL every call | Consent not completed, or the refresh token expired. Complete the consent URL. |
 | Tool returns `401` / `403` | Check the agent-to-toolbox identity **and** the downstream OAuth app / Genie space permissions — separate boundaries. |
 | Startup / readiness fails | Ensure `enableHostedAgentVNext=true` and `AZURE_AI_MODEL_DEPLOYMENT_NAME` matches a real deployment. |
 | Genie returns nothing but no error | The signed-in user lacks access to the Genie space or underlying Unity Catalog tables. |
 
-## Layout
-
-```
-databricks-agent/
-├── README.md                                    ← this file
-└── agent-framework-agent-with-foundry-toolbox-responses/
-    ├── azure.yaml                               ← model + hosted agent (azd)
-    ├── toolbox.yaml                             ← Databricks Genie toolbox definition
-    └── src/agent-framework-agent-databricks/
-        ├── main.py                              ← agent (toolbox consumer, responses protocol)
-        ├── requirements.txt
-        ├── Dockerfile
-        └── .env.example
-```
-
-## References
+## Next steps
 
 - [Use Azure Databricks Genie in Microsoft Foundry](https://learn.microsoft.com/azure/databricks/integrations/microsoft-foundry)
-- [Available managed MCP servers (Databricks)](https://learn.microsoft.com/azure/databricks/agents/mcp-tools/managed-mcp#available-managed-servers)
-- [Create and use a Foundry Toolbox](https://learn.microsoft.com/azure/foundry/agents/how-to/tools/toolbox)
 - [Use a toolbox with a hosted agent](https://learn.microsoft.com/azure/foundry/agents/how-to/tools/use-toolbox-hosted-agent)
-- [How toolbox authentication works](https://learn.microsoft.com/azure/foundry/agents/how-to/tools/tool-authentication)
-- Sibling route (verified): [`../sharepoint-agent-workiq`](../sharepoint-agent-workiq/README.md)
+- Sibling routes: [`../sharepoint-agent-workiq`](../sharepoint-agent-workiq/README.md) · [`../sharepoint-agent-copilot-retrieval`](../sharepoint-agent-copilot-retrieval/README.md)
