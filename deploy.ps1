@@ -16,7 +16,9 @@
 
 .PARAMETER OnboardOnly
     Skip infrastructure; only repoint Foundry bots to the existing APIM bridge.
-    Run this after publishing a new agent from the Foundry portal.
+    Reconciler for bots created outside this repo. To publish a new agent from
+    scratch (the Foundry portal button is gone for private projects), use
+    scripts/Publish-AgentToTeams.ps1 instead.
 
 .PARAMETER SkipOnboard
     Deploy infrastructure but do not run bot onboarding.
@@ -128,5 +130,10 @@ Write-Host '──────────────────────�
 Write-Host " APIM gateway : $gatewayUrl" -ForegroundColor White
 Write-Host " Endpoint     : $($outputs.endpointPattern.value)" -ForegroundColor White
 Write-Host ''
-Write-Host ' After publishing a NEW agent from Foundry, run:' -ForegroundColor Yellow
+Write-Host ' To publish an agent to Teams (the Foundry portal button is gone for' -ForegroundColor Yellow
+Write-Host ' private-networking projects), create its bot + publish via the REST API:' -ForegroundColor Yellow
+Write-Host "   ./scripts/Publish-AgentToTeams.ps1 -ResourceGroup $RG ``" -ForegroundColor Yellow
+Write-Host "       -AgentName <agent> -ProjectEndpoint <project-endpoint> -ApimName $apimName" -ForegroundColor Yellow
+Write-Host ''
+Write-Host ' If an agent was created/published by other means, reconcile its bot to APIM:' -ForegroundColor Yellow
 Write-Host '   ./deploy.ps1 -OnboardOnly' -ForegroundColor Yellow

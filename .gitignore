@@ -1,5 +1,7 @@
 # Python
 .venv/
+.venv*/
+**/.venv*/
 __pycache__/
 *.pyc
 
@@ -14,6 +16,8 @@ infra/**/*.json
 
 # Azure / tooling
 .azure/
+**/.azure/
+**/.azd-deploy/
 *.log
 last-trace.json
 

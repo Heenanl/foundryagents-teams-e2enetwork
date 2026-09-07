@@ -1,0 +1,5 @@
+fastmcp>=2.0.0
+msal
+azure-identity
+httpx
+python-dotenv
