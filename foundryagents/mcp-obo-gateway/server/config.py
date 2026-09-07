@@ -29,5 +29,5 @@ class Config:
 
     # Comma-separated provider module names to enable (providers/<name>.py).
     ENABLED_PROVIDERS = [
-        p for p in os.getenv("ENABLED_PROVIDERS", "whoami,copilot_retrieval").split(",") if p.strip()
+        p.strip() for p in os.getenv("ENABLED_PROVIDERS", "whoami,copilot_retrieval").split(",") if p.strip()
     ]
