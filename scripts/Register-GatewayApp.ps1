@@ -31,10 +31,10 @@ Write-Host "Tenant:" (az account show --query tenantId -o tsv)
 # Helper: PATCH the application via Graph using a temp JSON file (reliable quoting on PowerShell).
 function Patch-App([string]$oid, $bodyObj) {
   $f = New-TemporaryFile
-  ($bodyObj | ConvertTo-Json -Depth 10) | Set-Content -Path $f -Encoding utf8
+  ($bodyObj | ConvertTo-Json -Depth 10) | Set-Content -Path $f.FullName -Encoding utf8
   az rest --method PATCH --uri "https://graph.microsoft.com/v1.0/applications/$oid" `
-    --headers "Content-Type=application/json" --body "@$f" | Out-Null
-  Remove-Item $f -Force
+    --headers "Content-Type=application/json" --body "@$($f.FullName)" | Out-Null
+  Remove-Item $f.FullName -Force
 }
 
 # 1) Create (or reuse) the app.
