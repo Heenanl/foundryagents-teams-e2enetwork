@@ -39,7 +39,6 @@ async def main() -> None:
     token = _user_token(app_id)
 
     transport = StreamableHttpTransport(url, headers={"Authorization": f"Bearer {token}"})
-    async with Client(transport) as c:
         tools = [t.name for t in await c.list_tools()]
         print("tools:", tools)
 
